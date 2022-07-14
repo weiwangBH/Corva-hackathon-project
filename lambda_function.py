@@ -1,8 +1,8 @@
-from corva import Api, Cache, Logger, ScheduledDataTimeEvent, scheduled
+from corva import Api, Cache, Logger, ScheduledNaturalTimeEvent, scheduled
 from configuration import SETTINGS
 
 @scheduled
-def lambda_handler(event: ScheduledDataTimeEvent, api: Api, cache: Cache):
+def lambda_handler(event: ScheduledNaturalTimeEvent, api: Api, cache: Cache):
     """Insert your logic here"""
     Logger.info('Baker Hughes Corva Hackathon app started ')
 
