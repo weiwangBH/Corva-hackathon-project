@@ -32,8 +32,8 @@
     "environment": {},
     "runtime": "python3.8",
     "app": {
-      "scheduler_type": 2,
-      "cron_string": "*/5 * * * *"
+      "scheduler_type": 1,
+      "cron_string": "*/1 * * * *"
     }
   },
   "datasets": {}
