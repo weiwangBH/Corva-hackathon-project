@@ -26,7 +26,7 @@ def lambda_handler(event: ScheduledDataTimeEvent, api: Api, cache: Cache):
         },
         sort={'timestamp': 1},
         limit=500,
-        fields="data.bit_depth", "data.block_height", "data.hole_depth", "data.hook_load", "data.rotary_rpm", "data.standpipe_pressure"
+        fields="data.bit_depth, data.block_height, data.hole_depth, data.hook_load, data.rotary_rpm, data.standpipe_pressure"
         
     )
 
