@@ -26,127 +26,32 @@ def lambda_handler(event: ScheduledDataTimeEvent, api: Api, cache: Cache):
         },
         sort={'timestamp': 1},
         limit=500,
-        fields="data.bit_depth, data.block_height, data.hole_depth, data.hook_load, data.rotary_rpm, data.standpipe_pressure"
+        fields="timestamp, data.bha_id, data.weight_on_bit, data.rotary_rpm, data.state"
         
     )
 
     record_count = len(records)
     
-    pipeline_onnx_file="C:/Users/wangwei11/Documents/projects/repos/CodeAAA/code/modeling/xgboost-modeling/xgboost_modeling/codes/new data/model_outputs/pipeline_xgboost_63data_v2.onnx"
-    xgb_model_onnx_file="C:/Users/wangwei11/Documents/projects/repos/CodeAAA/code/modeling/xgboost-modeling/xgboost_modeling/codes/new data/model_outputs/xgboost_model_final_63data_v2.onnx"
-
+    records=pd.json_normalize(a).drop(['_id'], axis=1)
+    records=records[-1:].rename(columns={'data.weight_on_bit': 'weight_on_bit', 'data.rotary_rpm': 'rotary_rpm'})
     
-    FACTOR_FIELDS_xgb = ['DEPTH_FLAG', 'DELTA_BDEPTH_FLAG', 'RPM_FLAG', 'SPP_FLAG', 'HKLI_group_0', 'HKLI_group_1', 'HKLI_group_2', 'rig_state_level1', 'HKHT_group_0', 'HKHT_group_1', 'HKHT_group_2']
-    CONTINUOUS_FIELDS_xgb = ['PCT_DEPTH', 'BIT_DEPTH_RATE_p30s', 'DELTA_BDEPTH', 'DELTA_BDEPTH_30s', 'DELTA_DEPTH_30s',\
-                         'DELTA_HKHT_30s', 'DELTA_HKLI_30s', 'DEPTH_DIFF', 'HKHT', 'HKHT_RATE_p30s', 'HKHT_p30s', 'HKLI',\
-                         'HKLI_RATE_p30s', 'HKLI_p30s', 'HOLE_DEPTH_RATE_p30s', 'PREV_BIT_DEPTH', 'RPM', 'SPP','HKLI_p60s',\
-                         'HKHT_p60s', 'DELTA_BDEPTH_60s', 'DELTA_DEPTH_60s', 'DELTA_HKLI_60s', 'DELTA_HKHT_60s', 'BIT_DEPTH_RATE_p60s',\
-                         'HOLE_DEPTH_RATE_p60s', 'HKLI_RATE_p60s', 'HKHT_RATE_p60s']
-   
-    records=records.sort_values(by=['timestamp']).reset_index(drop=True)
-    for input_col in ['bit_depth', 'block_height', 'hole_depth', 'hook_load', 'rotary_rpm', 'standpipe_pressure']:
-        records[input_col]=np.where(records[input_col]==-999.25, np.nan, records[input_col])
-    records['TIME'] = records['time_ms'].apply(lambda x: datetime.fromtimestamp(float(x)))
-    records['TIME'] = records['TIME'].dt.tz_localize(None)
+    tau = 75
+    H1 = 1.76
+    H2 = 4.0
+    W_d_max = 9.0
+    h=0
     
-    data=records.copy()
-    data=data.rename(columns={'bit_depth': 'BITDEPTH', 'block_height': 'HKHT', 'hole_depth': 'DEPTH', 'hook_load': 'HKLI', 'rotary_rpm': 'RPM', 'standpipe_pressure': 'SPP'})
-    data['prev_TIME']=data['TIME']
-    data_time_shift=data.prev_TIME.shift(1)
-    data=pd.concat([data.drop(['prev_TIME'], axis=1), data_time_shift], axis=1)
-    data['time_diff']=(data['TIME']-data['prev_TIME']).dt.seconds
-    data['PREV_BIT_DEPTH']=data['BITDEPTH'].shift()
-    data['DELTA_BDEPTH'] = data['BITDEPTH'] - data['PREV_BIT_DEPTH']
-    data['DELTA_BDEPTH_FLAG'] = np.where(np.abs(data['DELTA_BDEPTH']) > 0.005, 1, data['DELTA_BDEPTH']) # pipe moving or not
-    data['DEPTH_DIFF'] = data['DEPTH'] - data['BITDEPTH']
-    data['DEPTH_FLAG'] = np.where(data['DEPTH_DIFF'] > 0.33, 1, 0) # on/off bottom
-    data['DEPTH_FLAG'] = np.where(pd.isnull(data['DEPTH_DIFF']), np.nan, data['DEPTH_FLAG'])
-    data['RPM_FLAG'] = np.where(data['RPM'] > 20, 1, 0) # rpm>20 - rotating
-    data['RPM_FLAG'] = np.where(pd.isnull(data['RPM']), np.nan, data['RPM_FLAG'])
-    data['SPP_FLAG'] = np.where(data['SPP'] > 200, 1, 0) # SPP>200 psi - circulating
-    data['SPP_FLAG'] = np.where(pd.isnull(data['SPP']), np.nan, data['SPP_FLAG'])
-    data['PCT_DEPTH']=data['BITDEPTH']/data['DEPTH']
-    data['HKLI_group_0']=np.where((data['HKLI']<120), 1, 0)
-    data['HKLI_group_0'] = np.where(pd.isnull(data['HKLI']), np.nan, data['HKLI_group_0'])
-    data['HKLI_group_1']=np.where(((data['HKLI']>=120)&(data['HKLI']<250)), 1, 0)
-    data['HKLI_group_1'] = np.where(pd.isnull(data['HKLI']), np.nan, data['HKLI_group_1'])
-    data['HKLI_group_2']=np.where((data['HKLI']>=250), 1, 0)
-    data['HKLI_group_2'] = np.where(pd.isnull(data['HKLI']), np.nan, data['HKLI_group_2'])
-    data['HKHT_group_0']=np.where((data['HKHT']<40), 1, 0)
-    data['HKHT_group_0'] = np.where(pd.isnull(data['HKHT']), np.nan, data['HKHT_group_0'])
-    data['HKHT_group_1']=np.where(((data['HKHT']>=40)&(data['HKHT']<100)), 1, 0)
-    data['HKHT_group_1'] = np.where(pd.isnull(data['HKHT']), np.nan, data['HKHT_group_1'])
-    data['HKHT_group_2']=np.where((data['HKHT']>=100), 1, 0)
-    data['HKHT_group_2'] = np.where(pd.isnull(data['HKHT']), np.nan, data['HKHT_group_2'])
-    
-    data['prior_30s_TIME']=data['TIME']-pd.Timedelta(seconds=30)
-    data=data.merge(data[['TIME', 'BITDEPTH', 'DEPTH', 'HKLI', 'HKHT']].rename(columns={'BITDEPTH': 'BITDEPTH_p30s',\
-                'DEPTH': 'DEPTH_p30s', 'HKLI': 'HKLI_p30s', 'HKHT': 'HKHT_p30s', 'TIME': 'prior_30s_TIME'}),\
-                on=['prior_30s_TIME'], how='left')
-    data['DELTA_BDEPTH_30s']=data['BITDEPTH']-data['BITDEPTH_p30s']
-    data['DELTA_DEPTH_30s']=data['DEPTH']-data['DEPTH_p30s']
-    data['DELTA_HKLI_30s']=data['HKLI']-data['HKLI_p30s']
-    data['DELTA_HKHT_30s']=data['HKHT']-data['HKHT_p30s']
-    data['BIT_DEPTH_RATE_p30s']=np.where((pd.notnull(data['BITDEPTH_p30s'])), data['DELTA_BDEPTH_30s']/30, np.nan)
-    data['HOLE_DEPTH_RATE_p30s']=np.where((pd.notnull(data['DEPTH_p30s'])), data['DELTA_DEPTH_30s']/30, np.nan)
-    data['HKLI_RATE_p30s']=np.where((pd.notnull(data['HKLI_p30s'])), data['DELTA_HKLI_30s']/30, np.nan)
-    data['HKHT_RATE_p30s']=np.where((pd.notnull(data['HKHT_p30s'])), data['DELTA_HKHT_30s']/30, np.nan)
-    
-    data['prior_60s_TIME']=data['TIME']-pd.Timedelta(seconds=60)
-    data=data.merge(data[['TIME', 'BITDEPTH', 'DEPTH', 'HKLI', 'HKHT']].rename(columns={'BITDEPTH': 'BITDEPTH_p60s',\
-                'DEPTH': 'DEPTH_p60s', 'HKLI': 'HKLI_p60s', 'HKHT': 'HKHT_p60s', 'TIME': 'prior_60s_TIME'}), on=['prior_60s_TIME'], how='left')
-    data['DELTA_BDEPTH_60s']=data['BITDEPTH']-data['BITDEPTH_p60s']
-    data['DELTA_DEPTH_60s']=data['DEPTH']-data['DEPTH_p60s']
-    data['DELTA_HKLI_60s']=data['HKLI']-data['HKLI_p60s']
-    data['DELTA_HKHT_60s']=data['HKHT']-data['HKHT_p60s']
-    data['BIT_DEPTH_RATE_p60s']=np.where((pd.notnull(data['BITDEPTH_p60s'])), data['DELTA_BDEPTH_60s']/60, np.nan)
-    data['HOLE_DEPTH_RATE_p60s']=np.where((pd.notnull(data['DEPTH_p60s'])), data['DELTA_DEPTH_60s']/60, np.nan)
-    data['HKLI_RATE_p60s']=np.where((pd.notnull(data['HKLI_p60s'])), data['DELTA_HKLI_60s']/60, np.nan)
-    data['HKHT_RATE_p60s']=np.where((pd.notnull(data['HKHT_p60s'])), data['DELTA_HKHT_60s']/60, np.nan)
-    
-    data['SPP']=data['SPP'].astype(float)
-    data['rig_state_level1']=np.where(data['DEPTH_DIFF']<100, 1, 0)
-    data['rig_state_level1'] = np.where(pd.isnull(data['DEPTH_DIFF']), np.nan, data['rig_state_level1'])
-        
-    data2=data.copy()
-    sess = rt.InferenceSession(pipeline_onnx_file)
-    pred_pipe_onnx = sess.run(None, {"input": np.array(data2[CONTINUOUS_FIELDS_xgb]).astype(np.float32)})
-    data_t = pd.concat([pd.DataFrame(pred_pipe_onnx[0], columns=CONTINUOUS_FIELDS_xgb), data2[FACTOR_FIELDS_xgb]], axis=1)
-    data_t = data_t.apply(lambda x: np.nan_to_num(x, nan=-999.25))
-    i=0
-    for col in data_t.columns.tolist():
-        data_t.rename(columns={col:'f'+str(i)}, inplace=True)
-        i=i+1
-    sess = rt.InferenceSession(xgb_model_onnx_file)
-    pred_model_onnx = sess.run(None, {"input": np.array(data_t).astype(np.float32)})
-    data_predict_xgb=pd.DataFrame(pred_model_onnx[0]).rename(columns={0:'ra_code3'}) 
-    data_predict_xgb['ra_desc3']=data_predict_xgb['ra_code3'].map(state_decoding_dict_xgb)
-    data_predict_xgb=pd.concat([data2[['rig_state_level1', 'BITDEPTH', 'SPP']], data_predict_xgb], axis=1)
-    data_predict_xgb['rig_state_level1']=np.where(data_predict_xgb['BITDEPTH']<90, 2, data_predict_xgb['rig_state_level1'])
-    data_predict_xgb['rig_state_level1']=np.where((data_predict_xgb['rig_state_level1']==0)&(data_predict_xgb['BITDEPTH']<1000), 3, data_predict_xgb['rig_state_level1'])
-    data_predict_xgb['rig_state_level1']=data_predict_xgb['rig_state_level1'].fillna(-1)
-    data_predict_xgb['rig_state_level1']=data_predict_xgb['rig_state_level1'].astype(int)
-    data_predict_xgb['rig_state_level2']=np.where((data_predict_xgb['ra_desc3']=='Rotary Drilling')|(data_predict_xgb['ra_desc3']=='Sliding')|\
-                                                        (data_predict_xgb['ra_desc3']=='Non-drilling'), 0, 1)
-    data_predict_xgb['rig_state_level2']=np.where(data_predict_xgb['rig_state_level1']==2, -1, data_predict_xgb['rig_state_level2'])
-    data_predict_xgb['rig_state_level2']=np.where(data_predict_xgb['rig_state_level1']==-1, 2, data_predict_xgb['rig_state_level2'])
-    data_predict_xgb['ra_desc3']=np.where((data_predict_xgb['SPP']<200)&(data_predict_xgb['ra_desc3']=='Ream up'), 'Rotation up', data_predict_xgb['ra_desc3'])
-    data_predict_xgb['ra_desc3']=np.where((data_predict_xgb['SPP']<200)&(data_predict_xgb['ra_desc3']=='Ream down'), 'Rotation down', data_predict_xgb['ra_desc3'])
-    data_predict_xgb['ra_desc3']=np.where((data_predict_xgb['SPP']<200)&(data_predict_xgb['ra_desc3']=='Rotation + Circulation'), 'Rotation', data_predict_xgb['ra_desc3'])
-    data_predict_xgb['rig_state_level3']=data_predict_xgb['ra_desc3'].map(inverted_level3_state_dict)
-    data_predict_xgb['rig_state_level3']=np.where(data_predict_xgb['rig_state_level1']==2, -1, data_predict_xgb['rig_state_level3'])
-    data_predict_xgb['ra_code3']=data_predict_xgb.apply(lambda x: str(x['rig_state_level1'])+str(x['rig_state_level2'])+str(x['rig_state_level3']).zfill(2), axis=1)
-    data_predict_xgb['ra_desc3']=data_predict_xgb.apply(lambda x: level1_state_dict[x['rig_state_level1']]+'_'+level2_state_dict[x['rig_state_level2']]+'_'+level3_state_dict[x['rig_state_level3']], axis=1)
-    data_t_prob=pd.DataFrame(pred_model_onnx[1])
-    data2['cl_code3']='DD_XGBoost'
-    data_t2=pd.concat([data2, data_predict_xgb[['ra_code3', 'ra_desc3', 'rig_state_level1', 'rig_state_level2', 'rig_state_level3']].\
-                       rename(columns={'rig_state_level1': 'ra_code3_l1', 'rig_state_level2': 'ra_code3_l2', 'rig_state_level3': 'ra_code3_l3'})], axis=1)
-    data_t2['ra_desc3_l1']=data_t2['ra_code3_l1'].map(level1_state_dict)
-    data_t2['ra_desc3_l2']=data_t2['ra_code3_l2'].map(level2_state_dict)
-    data_t2['ra_desc3_l3']=data_t2['ra_code3_l3'].map(level3_state_dict)
+    if records.get("state")=='Slide Drilling' | 'Rotary Drilling':
+        if records timestamp=0:
+            h=0
+        else:
+            bit_wear_rate = (1/tau) * pow(RPM/60,H1)*((W_d_max - 4)/(W_d_max - WOB/bit_size))*(1 + H2*0.5)/(1 + H2*h)
+            h+=bit_wear_rate*delta_time/3600
+    else:
+        bit_wear_rate=0
     
     # TODO model prediction here
-    company_id = records[0].get("company_id")
+    company_id = records.get("company_id")
 
     # Getting last exported timestamp from redis
     last_exported_timestamp = int(cache.load(key='last_exported_timestamp') or 0)
