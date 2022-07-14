@@ -29,7 +29,7 @@ def lambda_handler(event: ScheduledNaturalTimeEvent, api: Api, cache: Cache):
         fields="timestamp, data.bha_id, data.weight_on_bit, data.rotary_rpm, data.state"
         
     )
-
+    Logger.info(f'asset id:{asset_id}, start time: {start_time}, end time: {end_time}')
     record_count = len(records)
     
     records=pd.json_normalize(a).drop(['_id'], axis=1)
@@ -41,14 +41,17 @@ def lambda_handler(event: ScheduledNaturalTimeEvent, api: Api, cache: Cache):
     W_d_max = 9.0
     h=0
     
-    if records.get("state")=='Slide Drilling' | 'Rotary Drilling':
-        if records timestamp=0:
-            h=0
+    try:
+        if records.get("state")=='Slide Drilling' | 'Rotary Drilling':
+            if records.timestamp=0:
+                h=0
+            else:
+                bit_wear_rate = (1/tau) * pow(RPM/60,H1)*((W_d_max - 4)/(W_d_max - WOB/bit_size))*(1 + H2*0.5)/(1 + H2*h)
+                h+=bit_wear_rate*delta_time/3600
         else:
-            bit_wear_rate = (1/tau) * pow(RPM/60,H1)*((W_d_max - 4)/(W_d_max - WOB/bit_size))*(1 + H2*0.5)/(1 + H2*h)
-            h+=bit_wear_rate*delta_time/3600
-    else:
-        bit_wear_rate=0
+            bit_wear_rate=0
+    except:
+        Logger.info('Oopss cannot run the calcs')
     
     # TODO model prediction here
     company_id = records.get("company_id")
@@ -69,7 +72,7 @@ def lambda_handler(event: ScheduledNaturalTimeEvent, api: Api, cache: Cache):
         "provider": SETTINGS.provider,
         "collection": SETTINGS.output_collection,
         "data": {
-            "rig_state_prediction": ,
+            "new_wear_state": ,
             "start_time": start_time,
             "end_time": end_time
         },
