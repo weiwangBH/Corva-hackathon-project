@@ -1,8 +1,8 @@
-from corva import Api, Cache, Logger, ScheduledDataTimeEvent, scheduled
+from corva import Api, Cache, Logger, ScheduledNaturalTimeEvent, scheduled
 from configuration import SETTINGS
 
 @scheduled
-def lambda_handler(event: ScheduledDataTimeEvent, api: Api, cache: Cache):
+def lambda_handler(event: ScheduledNaturalTimeEvent, api: Api, cache: Cache):
     """Insert your logic here"""
     Logger.info('Baker Hughes Corva Hackathon app started ')
 
@@ -26,15 +26,32 @@ def lambda_handler(event: ScheduledDataTimeEvent, api: Api, cache: Cache):
         },
         sort={'timestamp': 1},
         limit=500,
-        fields="data.weight_on_bit"
+        fields="timestamp, data.bha_id, data.weight_on_bit, data.rotary_rpm, data.state"
+        
     )
 
     record_count = len(records)
-
-    # Computing mean weight on bit from the list of realtime wits records
-    # mean_weight_on_bit = statistics.mean(record.get("data", {}).get("weight_on_bit", 0) for record in records)
+    
+    records=pd.json_normalize(a).drop(['_id'], axis=1)
+    records=records[-1:].rename(columns={'data.weight_on_bit': 'weight_on_bit', 'data.rotary_rpm': 'rotary_rpm'})
+    
+    tau = 75
+    H1 = 1.76
+    H2 = 4.0
+    W_d_max = 9.0
+    h=0
+    
+    if records.get("state")=='Slide Drilling' | 'Rotary Drilling':
+        if records timestamp=0:
+            h=0
+        else:
+            bit_wear_rate = (1/tau) * pow(RPM/60,H1)*((W_d_max - 4)/(W_d_max - WOB/bit_size))*(1 + H2*0.5)/(1 + H2*h)
+            h+=bit_wear_rate*delta_time/3600
+    else:
+        bit_wear_rate=0
+    
     # TODO model prediction here
-    company_id = records[0].get("company_id")
+    company_id = records.get("company_id")
 
     # Getting last exported timestamp from redis
     last_exported_timestamp = int(cache.load(key='last_exported_timestamp') or 0)
@@ -52,7 +69,7 @@ def lambda_handler(event: ScheduledDataTimeEvent, api: Api, cache: Cache):
         "provider": SETTINGS.provider,
         "collection": SETTINGS.output_collection,
         "data": {
-            # "mean_weight_on_bit": mean_weight_on_bit,
+            "rig_state_prediction": ,
             "start_time": start_time,
             "end_time": end_time
         },
