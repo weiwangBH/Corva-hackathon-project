@@ -26,7 +26,8 @@ def lambda_handler(event: ScheduledDataTimeEvent, api: Api, cache: Cache):
         },
         sort={'timestamp': 1},
         limit=500,
-        fields="data.weight_on_bit"
+        fields="data.bit_depth", "data.block_height", "data.hole_depth", "data.hook_load", "data.rotary_rpm", "data.standpipe_pressure"
+        
     )
 
     record_count = len(records)
@@ -52,7 +53,7 @@ def lambda_handler(event: ScheduledDataTimeEvent, api: Api, cache: Cache):
         "provider": SETTINGS.provider,
         "collection": SETTINGS.output_collection,
         "data": {
-            # "mean_weight_on_bit": mean_weight_on_bit,
+            "rig_state_prediction": ,
             "start_time": start_time,
             "end_time": end_time
         },
