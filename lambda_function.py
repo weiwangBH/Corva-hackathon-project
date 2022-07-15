@@ -85,7 +85,7 @@ def lambda_handler(event: ScheduledNaturalTimeEvent, api: Api, cache: Cache):
     for i in range(records_features.shape[0]):
         bw_rate=records_features[i]['bit_wear_rate']
         timestamp=records_features[i]['timestamp']
-        output+={
+        output+="{
             "timestamp": end_time,
             "asset_id": asset_id,
             "company_id": company_id,
@@ -96,7 +96,7 @@ def lambda_handler(event: ScheduledNaturalTimeEvent, api: Api, cache: Cache):
                 "timestamp": timestamp,
             },
             "version":SETTINGS.version
-        }
+        }"
 
     Logger.debug(f"{asset_id=} {company_id=}")
     Logger.debug(f"{start_time=} {end_time=} {record_count=}")
