@@ -43,7 +43,7 @@
     "corva.data.drillstring": {
       "permissions": ["read"]
     },
-    "sample.baker-hughes-rig-state-prediction": {
+    "sample.calculated_bit_wear": {
       "permissions": ["read", "write"]
     }
   }
