@@ -1,5 +1,6 @@
 from corva import Api, Cache, Logger, ScheduledNaturalTimeEvent, scheduled
 from configuration import SETTINGS
+import pandas as pd
 
 @scheduled
 def lambda_handler(event: ScheduledNaturalTimeEvent, api: Api, cache: Cache):
