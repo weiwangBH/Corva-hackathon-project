@@ -16,7 +16,7 @@ def lambda_handler(event: ScheduledNaturalTimeEvent, api: Api, cache: Cache):
     # We are only querying for weight_on_bit field since that is the only field we need. It is nested under data.
     records_features = api.get_dataset(
         provider="corva",
-        dataset=SETTINGS.wits_collection1,
+        dataset=SETTINGS.wits_collection,
         query={
             'asset_id': asset_id,
             'timestamp': {
@@ -26,7 +26,7 @@ def lambda_handler(event: ScheduledNaturalTimeEvent, api: Api, cache: Cache):
         },
         sort={'timestamp': 1},
         limit=500,
-        fields="timestamp, data.bha_id, data.weight_on_bit, data.rotary_rpm, data.state"
+        fields="timestamp, data.weight_on_bit, data.rotary_rpm, data.state"
         
     )
     """
@@ -35,22 +35,18 @@ def lambda_handler(event: ScheduledNaturalTimeEvent, api: Api, cache: Cache):
         dataset=SETTINGS.wits_collection2,
         query={
             'asset_id': asset_id,
-            'timestamp': {
-                '$gte': start_time,
-                '$lte': end_time,
-            }
-        },
+            'data.components.family': 'bit'
+              },
         sort={'timestamp': 1},
         limit=500,
-        fields="timestamp, data.components.bha_id"
+        fields="timestamp, data.components.size"
         
     )
     """
     records_features=pd.json_normalize(records_features).drop(['_id'], axis=1).rename(columns={'data.weight_on_bit': 'weight_on_bit', 'data.rotary_rpm': 'rotary_rpm'})
     
     record_count = len(records)
-   
-    
+  
     tau = 75
     H1 = 1.76
     H2 = 4.0
@@ -85,19 +81,22 @@ def lambda_handler(event: ScheduledNaturalTimeEvent, api: Api, cache: Cache):
         return None
 
     # Building the required output
-    output = {
-        "timestamp": end_time,
-        "asset_id": asset_id,
-        "company_id": company_id,
-        "provider": SETTINGS.provider,
-        "collection": SETTINGS.output_collection,
-        "data": {
-            "new_wear_state": h,
-            "start_time": start_time,
-            "end_time": end_time
-        },
-        "version":SETTINGS.version
-    }
+    output=""
+    for i in range(records_features.shape[0]):
+        bw_rate=records_features[i]['bit_wear_rate']
+        timestamp=records_features[i]['timestamp']
+        output+={
+            "timestamp": end_time,
+            "asset_id": asset_id,
+            "company_id": company_id,
+            "provider": SETTINGS.provider,
+            "collection": SETTINGS.output_collection,
+            "data": {
+                "new_wear_state": bw_rate,
+                "timestamp": timestamp,
+            },
+            "version":SETTINGS.version
+        }
 
     Logger.debug(f"{asset_id=} {company_id=}")
     Logger.debug(f"{start_time=} {end_time=} {record_count=}")
