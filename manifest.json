@@ -33,7 +33,7 @@
     "runtime": "python3.8",
     "app": {
       "scheduler_type": 1,
-      "cron_string": "*/1 * * * *"
+      "cron_string": "*/30 * * * *"
     }
   },
   "datasets": {}
