@@ -33,8 +33,18 @@
     "runtime": "python3.8",
     "app": {
       "scheduler_type": 1,
-      "cron_string": "*/30 * * * *"
+      "cron_string": "*/1 * * * *"
     }
   },
-  "datasets": {}
+  "datasets": {
+    "corva.wits": {
+      "permissions": ["read"]
+    },
+    "corva.data.drillstring": {
+      "permissions": ["read"]
+    },
+    "sample.baker-hughes-rig-state-prediction": {
+      "permissions": ["read", "write"]
+    }
+  }
 }
