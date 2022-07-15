@@ -10,13 +10,13 @@ def lambda_handler(event: ScheduledNaturalTimeEvent, api: Api, cache: Cache):
     asset_id = event.asset_id
     start_time = event.start_time
     end_time = event.end_time
-
+    Logger.info(f'asset id:{asset_id}, start time: {start_time}, end time: {end_time}')
     # You have to fetch the realtime drilling data for the asset based on start and end time of the event.
     # start_time and end_time are inclusive so the query is structured accordingly to avoid processing duplicate data
     # We are only querying for weight_on_bit field since that is the only field we need. It is nested under data.
-    records = api.get_dataset(
+    records_features = api.get_dataset(
         provider="corva",
-        dataset=SETTINGS.wits_collection,
+        dataset=SETTINGS.wits_collection1,
         query={
             'asset_id': asset_id,
             'timestamp': {
@@ -29,27 +29,50 @@ def lambda_handler(event: ScheduledNaturalTimeEvent, api: Api, cache: Cache):
         fields="timestamp, data.bha_id, data.weight_on_bit, data.rotary_rpm, data.state"
         
     )
-
-    record_count = len(records)
+    """
+    records_bha = api.get_dataset(
+        provider="corva",
+        dataset=SETTINGS.wits_collection2,
+        query={
+            'asset_id': asset_id,
+            'timestamp': {
+                '$gte': start_time,
+                '$lte': end_time,
+            }
+        },
+        sort={'timestamp': 1},
+        limit=500,
+        fields="timestamp, data.components.bha_id"
+        
+    )
+    """
+    records_features=pd.json_normalize(records_features).drop(['_id'], axis=1).rename(columns={'data.weight_on_bit': 'weight_on_bit', 'data.rotary_rpm': 'rotary_rpm'})
     
-    records=pd.json_normalize(a).drop(['_id'], axis=1)
-    records=records[-1:].rename(columns={'data.weight_on_bit': 'weight_on_bit', 'data.rotary_rpm': 'rotary_rpm'})
+    record_count = len(records)
+   
     
     tau = 75
     H1 = 1.76
     H2 = 4.0
     W_d_max = 9.0
-    h=0
+    bit_size=9.75
     
-    if records.get("state")=='Slide Drilling' | 'Rotary Drilling':
-        if records timestamp=0:
-            h=0
-        else:
-            bit_wear_rate = (1/tau) * pow(RPM/60,H1)*((W_d_max - 4)/(W_d_max - WOB/bit_size))*(1 + H2*0.5)/(1 + H2*h)
-            h+=bit_wear_rate*delta_time/3600
-    else:
-        bit_wear_rate=0
-    
+    try:
+        for i in range(records_features.shape[0]):
+            if records_features.loc[i, 'state']=='Slide Drilling' | 'Rotary Drilling':
+                records_features.loc[i, 'bit_wear_rate'] = (1/tau) * pow(records_features.loc[i, 'rotary_rpm']/60,H1)*((W_d_max - 4)/(W_d_max - records_features.loc[i, 'weight_on_bit']/bit_size))*(1 + H2*0.5)/(1 + H2*h)
+                if i==0:
+                    h=0
+                    start_timestamp=records_features.loc[i, 'timestamp']
+                else:
+                    h+=records_features.loc[i, 'bit_wear_rate']*(records_features.loc[i, 'timestamp']-start_timestamp)/3600 
+            else:
+                records_features.loc[i, 'bit_wear_rate']=0
+                
+    except:
+        Logger.info('Oopss cannot run the calcs')
+
+    Logger.info(f'h is {h}')
     # TODO model prediction here
     company_id = records.get("company_id")
 
@@ -69,11 +92,11 @@ def lambda_handler(event: ScheduledNaturalTimeEvent, api: Api, cache: Cache):
         "provider": SETTINGS.provider,
         "collection": SETTINGS.output_collection,
         "data": {
-            "rig_state_prediction": ,
+            "new_wear_state": h,
             "start_time": start_time,
             "end_time": end_time
         },
-        "version": SETTINGS.version
+        "version":SETTINGS.version
     }
 
     Logger.debug(f"{asset_id=} {company_id=}")
